@@ -4,7 +4,7 @@ const MESSAGES = require('../utils/messages');
 const { createErrorResponse, createSuccessResponse } = require('../helpers/common/resHelper');
 const SERVICES = require('../services');
 const MODELS = require('../models');
-const { generateETHTradingWallet, generateSolanaTradingWallet, encryptJwt, hashPassword, compareHash, generateOTP, generateExpiryTime, sendEmail } = require('../utils/utils');
+const { generateETHTradingWallet, generateSolanaTradingWallet, encryptJwt, hashPassword, compareHash, generateOTP, generateExpiryTime, sendEmail, createResetPasswordLink, decryptJwt } = require('../utils/utils');
 const CONSTANTS = require('../utils/constants');
 
 
@@ -343,6 +343,198 @@ userController.verifyEmail = async (payload) => {
 	);
 
 	return createSuccessResponse(MESSAGES.EMAIL_VERIFIED);
+};
+
+/**
+ * Forgot password - Send reset password link to user's email
+ * @param {*} payload 
+ * @returns 
+ */
+userController.forgotPassword = async (payload) => {
+	// Find user by email
+	const user = await SERVICES.dbService.findOne(MODELS.userModel, {
+		email: payload.email,
+		isDeleted: false
+	});
+
+	if (!user) {
+		// Don't reveal if email exists or not for security reasons
+		// Return success message even if user doesn't exist
+		return createSuccessResponse(MESSAGES.RESET_PASSWORD_LINK_SENT);
+	}
+
+	// Check if user has a password (users registered via wallet might not have password)
+	if (!user.password) {
+		throw createErrorResponse(MESSAGES.INVALID_PASSWORD, CONSTANTS.ERROR_TYPES.BAD_REQUEST);
+	}
+
+	// Create reset password link (this generates the token internally)
+	const resetPasswordLink = createResetPasswordLink({
+		_id: user._id,
+		email: user.email,
+		role: CONSTANTS.AVAILABLE_AUTHS.USER
+	});
+
+	// Extract token from the link (token is the last part after the last '/')
+	const resetToken = resetPasswordLink.split('/').pop();
+
+	console.log('resetToken', resetToken);
+
+	// Store token in session with expiration (1 hour)
+	const tokenExpDate = generateExpiryTime(3600); // 1 hour = 3600 seconds
+	await SERVICES.dbService.findOneAndUpdate(
+		MODELS.sessionModel,
+		{ userId: user._id, tokenType: CONSTANTS.TOKEN_TYPES.RESET_PASSWORD },
+		{
+			userId: user._id,
+			tokenType: CONSTANTS.TOKEN_TYPES.RESET_PASSWORD,
+			token: resetToken,
+			tokenExpDate: tokenExpDate
+		},
+		{ upsert: true }
+	);
+
+	// Send reset password email
+	try {
+		await sendEmail({
+			email: user.email,
+			name: user.username || user.email,
+			resetPasswordLink: resetPasswordLink
+		}, CONSTANTS.EMAIL_TYPES.RESET_PASSWORD_EMAIL);
+	} catch (error) {
+		console.error('Error sending reset password email:', error);
+		// Continue even if email fails
+	}
+
+	return createSuccessResponse(MESSAGES.RESET_PASSWORD_LINK_SENT);
+};
+
+/**
+ * Reset password - Update user password using reset token
+ * @param {*} payload 
+ * @returns 
+ */
+userController.resetPassword = async (payload) => {
+	// Validate token and get user data
+	let decodedToken;
+	try {
+		decodedToken = decryptJwt(payload.token);
+	} catch (error) {
+		throw createErrorResponse(MESSAGES.INVALID_TOKEN, CONSTANTS.ERROR_TYPES.BAD_REQUEST);
+	}
+
+	// Check if token has required fields
+	if (!decodedToken._id || !decodedToken.email) {
+		throw createErrorResponse(MESSAGES.INVALID_TOKEN, CONSTANTS.ERROR_TYPES.BAD_REQUEST);
+	}
+
+	// Find user by ID from token
+	const user = await SERVICES.dbService.findOne(MODELS.userModel, {
+		_id: decodedToken._id,
+		email: decodedToken.email,
+		isDeleted: false
+	});
+
+	if (!user) {
+		throw createErrorResponse(MESSAGES.EMAIL_NOT_EXIST, CONSTANTS.ERROR_TYPES.BAD_REQUEST);
+	}
+
+	// Verify token exists in session and is not expired
+	const session = await SERVICES.dbService.findOne(MODELS.sessionModel, {
+		userId: user._id,
+		tokenType: CONSTANTS.TOKEN_TYPES.RESET_PASSWORD
+	});
+
+	if (!session || !session.token) {
+		throw createErrorResponse(MESSAGES.INVALID_TOKEN, CONSTANTS.ERROR_TYPES.BAD_REQUEST);
+	}
+
+	// Check if token matches
+	if (session.token !== payload.token) {
+		throw createErrorResponse(MESSAGES.INVALID_TOKEN, CONSTANTS.ERROR_TYPES.BAD_REQUEST);
+	}
+
+	// Check if token is expired
+	if (session.tokenExpDate && new Date() > new Date(session.tokenExpDate)) {
+		throw createErrorResponse(MESSAGES.OTP_EXPIRED, CONSTANTS.ERROR_TYPES.BAD_REQUEST);
+	}
+
+	// Validate password (minimum 6 characters)
+	if (!payload.password || payload.password.length < 6) {
+		throw createErrorResponse(MESSAGES.INVALID_PASSWORD, CONSTANTS.ERROR_TYPES.BAD_REQUEST);
+	}
+
+	// Hash new password
+	const hashedPassword = hashPassword(payload.password);
+
+	// Update user password
+	await SERVICES.dbService.findOneAndUpdate(
+		MODELS.userModel,
+		{ _id: user._id },
+		{ password: hashedPassword }
+	);
+
+	// Clear reset token from session
+	await SERVICES.dbService.findOneAndUpdate(
+		MODELS.sessionModel,
+		{ userId: user._id, tokenType: CONSTANTS.TOKEN_TYPES.RESET_PASSWORD },
+		{ token: null, tokenExpDate: null }
+	);
+
+	return createSuccessResponse(MESSAGES.PASSWORD_CHANGED);
+};
+
+/**
+ * Resend OTP - Resend email verification OTP to user
+ * @param {*} payload 
+ * @returns 
+ */
+userController.resendOTP = async (payload) => {
+	// Find user by email
+	const user = await SERVICES.dbService.findOne(MODELS.userModel, {
+		email: payload.email,
+		isDeleted: false
+	});
+
+	if (!user) {
+		throw createErrorResponse(MESSAGES.EMAIL_NOT_EXIST, CONSTANTS.ERROR_TYPES.BAD_REQUEST);
+	}
+
+	// Check if email is already verified
+	if (user.isEmailVerified) {
+		throw createErrorResponse(MESSAGES.EMAIL_VERIFIED, CONSTANTS.ERROR_TYPES.BAD_REQUEST);
+	}
+
+	// Generate new email verification OTP
+	const emailOTP = generateOTP(CONSTANTS.OTP_LENGTH);
+	const tokenExpDate = generateExpiryTime(CONSTANTS.OTP_EXPIRIED_TIME_IN_SECONDS || 300);
+
+	// Update session with new OTP
+	await SERVICES.dbService.findOneAndUpdate(
+		MODELS.sessionModel,
+		{ userId: user._id, tokenType: CONSTANTS.TOKEN_TYPES.OTP },
+		{
+			userId: user._id,
+			tokenType: CONSTANTS.TOKEN_TYPES.OTP,
+			emailOTP: emailOTP,
+			tokenExpDate: tokenExpDate
+		},
+		{ upsert: true }
+	);
+
+	// Send verification email
+	try {
+		await sendEmail({
+			email: user.email,
+			userName: user.username || user.email,
+			token: emailOTP
+		}, CONSTANTS.EMAIL_TYPES.VERIFICATION_EMAIL);
+	} catch (error) {
+		console.error('Error sending verification email:', error);
+		// Continue even if email fails
+	}
+
+	return createSuccessResponse(MESSAGES.OTP_SENT_TO_YOUR_EMAIL);
 };
 
 /* export controller */

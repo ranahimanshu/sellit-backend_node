@@ -114,6 +114,46 @@ const routes = [
 		},
 		handler: userController.verifyEmail
 	},
+	{
+		method: 'POST',
+		path: '/v1/user/resend-otp',
+		joiSchemaForSwagger: {
+			body: {
+				email: Joi.string().isValidEmail().required().description('User email address'),
+			},
+			group: 'USER',
+			description: 'Route to resend email verification OTP to user.',
+			model: 'ResendOTP'
+		},
+		handler: userController.resendOTP
+	},
+	{
+		method: 'POST',
+		path: '/v1/user/forgot-password',
+		joiSchemaForSwagger: {
+			body: {
+				email: Joi.string().isValidEmail().required().description('User email address'),
+			},
+			group: 'USER',
+			description: 'Route to request password reset. Sends reset password link to user email.',
+			model: 'ForgotPassword'
+		},
+		handler: userController.forgotPassword
+	},
+	{
+		method: 'POST',
+		path: '/v1/user/reset-password',
+		joiSchemaForSwagger: {
+			body: {
+				token: Joi.string().required().description('Reset password token from email link'),
+				password: Joi.string().min(6).required().description('New password (minimum 6 characters)'),
+			},
+			group: 'USER',
+			description: 'Route to reset user password using token from email.',
+			model: 'ResetPassword'
+		},
+		handler: userController.resetPassword
+	},
 ];
 
 module.exports = routes;
