@@ -40,7 +40,7 @@ const startNodeserver = async () => {
 
 	await require('./app/startup/expressStartup')(app, isSwaggerWrite); // express startup.
 	return new Promise((resolve, reject) => {
-		server.listen(SERVER.PORT, (err) => {
+		server.listen(SERVER.PORT, "0.0.0.0", (err) => {
 			if (err) reject(err);
 			resolve();
 		});
