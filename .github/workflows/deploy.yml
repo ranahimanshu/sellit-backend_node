@@ -1,4 +1,4 @@
-name: Deploy to EC2
+name: Deploy to EC2 (Development)
 
 on:
   push:
@@ -11,15 +11,17 @@ env:
 
 jobs:
   deploy:
-    name: Deploy to EC2
+    name: Deploy to EC2 - Dev
     runs-on: ubuntu-latest
 
     steps:
       - name: Checkout code
-        uses: actions/checkout@v3
+        uses: actions/checkout@v4
+        with:
+          ref: development
 
       - name: Setup Node.js
-        uses: actions/setup-node@v3
+        uses: actions/setup-node@v4
         with:
           node-version: ${{ env.NODE_VERSION }}
           cache: 'npm'
@@ -27,39 +29,47 @@ jobs:
       - name: Install dependencies
         run: npm ci
 
-      - name: Run linter (if configured)
+      - name: Run linter (optional)
         run: |
           if [ -f ".eslintrc" ] || [ -f ".eslintrc.js" ] || [ -f ".eslintrc.json" ]; then
             npm run lint || true
           fi
 
-      - name: Deploy to EC2
+      - name: Deploy to EC2 (Development)
         uses: appleboy/ssh-action@v1.0.0
         with:
           host: ${{ secrets.EC2_HOST }}
           username: ${{ secrets.EC2_USER }}
-          key: ${{ secrets.EC2_SSH_KEY }}
-          port: ${{ secrets.EC2_PORT || 22 }}
+          key: ${{ secrets.DEC }}
+          port: 22
           script: |
-            # Navigate to application directory
-            cd /home/${{ secrets.EC2_USERNAME }}/sellit-node-js || cd /var/www/sellit-node-js || exit 1
-            
-            # Pull latest changes
+            set -e
+
+            echo "🚀 Deploying DEVELOPMENT branch..."
+
+            # Go to dev directory (recommended separate folder)
+            cd /home/${{ secrets.EC2_USER }}/sellit-node-js-dev \
+              || cd /var/www/sellit-node-js-dev \
+              || exit 1
+
+            # Ensure correct branch
             git fetch origin
-            git reset --hard origin/main || git reset --hard origin/master
-            
-            # Install/update dependencies
+            git checkout development
+            git reset --hard origin/development
+
+            # Install production dependencies
             npm ci --production
-            
-            # Restart application using PM2 (if installed)
+
+            # Restart app using PM2
             if command -v pm2 &> /dev/null; then
-              pm2 restart sellit-node-js || pm2 start server.js --name sellit-node-js
+              pm2 restart sellit-node-js-dev || pm2 start server.js --name sellit-node-js-dev
             else
-              # Fallback: restart using systemd or direct node
-              sudo systemctl restart sellit-node-js || (pkill -f "node server.js" && nohup node server.js > /dev/null 2>&1 &)
+              echo "⚠️ PM2 not found, starting app manually"
+              pkill -f "node server.js" || true
+              nohup node server.js > app.log 2>&1 &
             fi
-            
-            # Check if application is running
+
+            # Verify app
             sleep 5
             if command -v pm2 &> /dev/null; then
               pm2 status
@@ -68,6 +78,4 @@ jobs:
             fi
 
       - name: Deployment Status
-        run: |
-          echo "✅ Deployment completed successfully!"
-
+        run: echo "✅ Development deployment completed successfully!"
