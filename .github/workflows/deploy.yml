@@ -1,0 +1,73 @@
+name: Deploy to EC2
+
+on:
+  push:
+    branches:
+      - development
+  workflow_dispatch:
+
+env:
+  NODE_VERSION: '18.x'
+
+jobs:
+  deploy:
+    name: Deploy to EC2
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v3
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v3
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: 'npm'
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Run linter (if configured)
+        run: |
+          if [ -f ".eslintrc" ] || [ -f ".eslintrc.js" ] || [ -f ".eslintrc.json" ]; then
+            npm run lint || true
+          fi
+
+      - name: Deploy to EC2
+        uses: appleboy/ssh-action@v1.0.0
+        with:
+          host: ${{ secrets.EC2_HOST }}
+          username: ${{ secrets.EC2_USER }}
+          key: ${{ secrets.EC2_SSH_KEY }}
+          port: ${{ secrets.EC2_PORT || 22 }}
+          script: |
+            # Navigate to application directory
+            cd /home/${{ secrets.EC2_USERNAME }}/sellit-node-js || cd /var/www/sellit-node-js || exit 1
+            
+            # Pull latest changes
+            git fetch origin
+            git reset --hard origin/main || git reset --hard origin/master
+            
+            # Install/update dependencies
+            npm ci --production
+            
+            # Restart application using PM2 (if installed)
+            if command -v pm2 &> /dev/null; then
+              pm2 restart sellit-node-js || pm2 start server.js --name sellit-node-js
+            else
+              # Fallback: restart using systemd or direct node
+              sudo systemctl restart sellit-node-js || (pkill -f "node server.js" && nohup node server.js > /dev/null 2>&1 &)
+            fi
+            
+            # Check if application is running
+            sleep 5
+            if command -v pm2 &> /dev/null; then
+              pm2 status
+            else
+              ps aux | grep "node server.js" | grep -v grep
+            fi
+
+      - name: Deployment Status
+        run: |
+          echo "✅ Deployment completed successfully!"
+
