@@ -146,7 +146,7 @@ const routes = [
 		joiSchemaForSwagger: {
 			body: {
 				token: Joi.string().required().description('Reset password token from email link'),
-				password: Joi.string().min(6).required().description('New password (minimum 6 characters)'),
+				password: Joi.string().min(8).required().description('New password (minimum 6 characters)'),
 			},
 			group: 'USER',
 			description: 'Route to reset user password using token from email.',
