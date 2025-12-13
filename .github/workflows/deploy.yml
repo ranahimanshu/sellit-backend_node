@@ -52,10 +52,8 @@ jobs:
 
             echo "🚀 Deploying DEVELOPMENT branch..."
 
-            # Go to dev directory (recommended separate folder)
-            cd /home/${{ secrets.EC2_USER }}/sellit-node-js-dev \
-              || cd /var/www/sellit-node-js-dev \
-              || exit 1
+            # Go to dev directory
+            cd /home/${{ secrets.EC2_USER }}/SELLIT_DEV/sellit-backend_node || exit 1
 
             # Ensure correct branch
             git fetch origin
@@ -72,7 +70,7 @@ jobs:
 
             # Restart app using PM2
             if command -v pm2 &> /dev/null; then
-              pm2 restart sellit-node-js-dev || pm2 start server.js --name sellit-node-js-dev
+              pm2 restart sellit-dev-api || pm2 start server.js --name sellit-dev-api
             else
               echo "⚠️ PM2 not found, starting app manually"
               pkill -f "node server.js" || true
