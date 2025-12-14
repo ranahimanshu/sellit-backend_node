@@ -537,5 +537,56 @@ userController.resendOTP = async (payload) => {
 	return createSuccessResponse(MESSAGES.OTP_SENT_TO_YOUR_EMAIL);
 };
 
+/**
+ * Change user password
+ * @param {*} payload 
+ * @returns 
+ */
+userController.changePassword = async (payload) => {
+	// Find user by ID from authenticated user
+	const user = await SERVICES.dbService.findOne(MODELS.userModel, {
+		_id: payload.user._id,
+		isDeleted: false
+	});
+
+	if (!user) {
+		throw createErrorResponse(MESSAGES.EMAIL_NOT_EXIST, CONSTANTS.ERROR_TYPES.BAD_REQUEST);
+	}
+
+	// Check if user has a password
+	if (!user.password) {
+		throw createErrorResponse(MESSAGES.INVALID_PASSWORD, CONSTANTS.ERROR_TYPES.BAD_REQUEST);
+	}
+
+	// Verify current password
+	const passwordMatched = compareHash(payload.currentPassword, user.password);
+	if (!passwordMatched) {
+		throw createErrorResponse(MESSAGES.CURRENT_PASSWORD_MISMATCHED, CONSTANTS.ERROR_TYPES.BAD_REQUEST);
+	}
+
+	// Check if new password is same as current password
+	const newPasswordMatches = compareHash(payload.newPassword, user.password);
+	if (newPasswordMatches) {
+		throw createErrorResponse(MESSAGES.SAME_CURRENT_AND_OLD_PASSWORD, CONSTANTS.ERROR_TYPES.BAD_REQUEST);
+	}
+
+	// Validate new password (minimum 6 characters)
+	if (!payload.newPassword || payload.newPassword.length < 6) {
+		throw createErrorResponse(MESSAGES.INVALID_PASSWORD, CONSTANTS.ERROR_TYPES.BAD_REQUEST);
+	}
+
+	// Hash new password
+	const hashedPassword = hashPassword(payload.newPassword);
+
+	// Update user password
+	await SERVICES.dbService.findOneAndUpdate(
+		MODELS.userModel,
+		{ _id: user._id },
+		{ password: hashedPassword }
+	);
+
+	return createSuccessResponse(MESSAGES.PASSWORD_CHANGED);
+};
+
 /* export controller */
 module.exports = userController;

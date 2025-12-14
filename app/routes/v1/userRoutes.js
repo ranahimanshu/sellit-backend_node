@@ -154,6 +154,24 @@ const routes = [
 		},
 		handler: userController.resetPassword
 	},
+	{
+		method: 'PUT',
+		path: '/v1/user/change-password',
+		joiSchemaForSwagger: {
+			headers: {
+				authorization: Joi.string().required().description('User\'s JWT token.'),
+			},
+			body: {
+				currentPassword: Joi.string().required().description('Current password'),
+				newPassword: Joi.string().min(6).required().description('New password (minimum 6 characters)'),
+			},
+			group: 'USER',
+			description: 'Route to change user password. Requires authentication.',
+			model: 'ChangePassword'
+		},
+		auth: CONSTANTS.AVAILABLE_AUTHS.USER,
+		handler: userController.changePassword
+	},
 ];
 
 module.exports = routes;
