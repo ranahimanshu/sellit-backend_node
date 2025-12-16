@@ -9,5 +9,6 @@ module.exports = {
 	userModel: require('./userModel'),
 	dbVersionModel: require('./dbVersionModel'),
 	adminModel: require('./adminModel'),
-	filesModel: require('./filesModel')
+	filesModel: require('./filesModel'),
+	categoryModel: require('./categoryModel')
 };
