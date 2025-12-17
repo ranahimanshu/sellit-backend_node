@@ -8,7 +8,7 @@ const { filesModel } = require('../models');
 const { getYearMonthAggregation, convertIdToMongooseId } = require('../utils/utils');
 
 const fileUploadService = {};
-// AWS.config.update({ accessKeyId: CONFIG.s3Bucket.accessKeyId, secretAccessKey: CONFIG.s3Bucket.secretAccessKey });
+AWS.config.update({ accessKeyId: CONFIG.s3Bucket.accessKeyId, secretAccessKey: CONFIG.s3Bucket.secretAccessKey });
 const S3Bucket = new AWS.S3();
 
 /**
