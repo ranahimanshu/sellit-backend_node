@@ -10,5 +10,6 @@ module.exports = {
 	userController: require('./userController'),
 	adminController: require('./adminController'),
 	fileController: require('./fileController'),
-	categoryController: require('./categoryController')
+	categoryController: require('./categoryController'),
+	adController: require('./adController')
 };

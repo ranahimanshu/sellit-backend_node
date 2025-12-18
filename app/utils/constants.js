@@ -34,6 +34,18 @@ CONSTANTS.CHAINS = {
 	BASE: 4
 };
 
+CONSTANTS.TRANSACTION_TYPES = {
+	SELL: 1,
+	BUY: 2,
+	GIVEN_AWAY: 3
+};
+
+CONSTANTS.AD_STATUS = {
+	PENDING: 1, // After content moderation, waiting for admin approval (not approved)
+	REJECT: 2, // Rejected by admin
+	APPROVED: 3 // Approved and active
+};
+
 CONSTANTS.USER_ROLES = {
 	ADMIN: 1,
 };

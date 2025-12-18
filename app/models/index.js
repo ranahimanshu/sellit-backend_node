@@ -10,5 +10,6 @@ module.exports = {
 	dbVersionModel: require('./dbVersionModel'),
 	adminModel: require('./adminModel'),
 	filesModel: require('./filesModel'),
-	categoryModel: require('./categoryModel')
+	categoryModel: require('./categoryModel'),
+	adModel: require('./adModel')
 };
